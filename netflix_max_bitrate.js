@@ -1,8 +1,15 @@
+const debugEnabled = false;
+const clickOverrideButton = true;
+const hideMenu = true;
+
+const log = debugEnabled ? console.log : null;
+
 function getElementByXPath(xpath) {
     return document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
 }
 
 function maxbitrate_set() {
+    log?.('[maxbitrate_set]')
     window.dispatchEvent(new KeyboardEvent('keydown', {
         keyCode: 83,
         ctrlKey: true,
@@ -15,8 +22,11 @@ function maxbitrate_set() {
     const BUTTON = getElementByXPath("//button[text()='Override']");
 
     if (!(VIDEO_SELECT && AUDIO_SELECT && BUTTON)){
+        log?.('[maxbitrate_set] return(false) |', 'VIDEO_SELECT', VIDEO_SELECT, 'AUDIO_SELECT', AUDIO_SELECT, 'BUTTON', BUTTON)
         return false;
     }
+
+    log?.('[maxbitrate_set]', 'VIDEO_SELECT', VIDEO_SELECT, 'AUDIO_SELECT', AUDIO_SELECT, 'BUTTON', BUTTON)
 
     let was_set = 0;
 
@@ -25,48 +35,47 @@ function maxbitrate_set() {
 
         let options = parent.querySelectorAll('select > option');
 
+        log?.('[maxbitrate_set]', 'el', el, 'options', options)
+
         for (let i = 0; i < options.length - 1; i++) {
             options[i].removeAttribute('selected');
         }
 
         if (options.length > 0) {
             options[options.length - 1].setAttribute('selected', 'selected');
+            log?.('[maxbitrate_set]', 'el', el, 'selected option', options[options.length - 1])
             was_set += 1;
         }
     });
 
+    log?.(`[maxbitrate_set]`, 'was_set', was_set)
     if (was_set != 2) return false;
 
-    // attempt to click the button immediately
-    BUTTON.click();
+    if (clickOverrideButton) {
+        BUTTON.click();
+    }
+
+    if (document.querySelector('.player-loading-background-image')) {
+        log?.('[maxbitrate_set] return(false); video is still loading')
+        return false;
+    }
+
     maxbitrate_finish();
 
+    log?.('[maxbitrate_set] return(true)')
     return true;
 }
 
-function maxbitrate_hide(attempts) {
-    // console.log("hide");
-    const overrideButton = getElementByXPath("//button[text()='Override']");
-
-    if (overrideButton) {
-        overrideButton.click();
-        maxbitrate_finish();
-    } else if (attempts > 0) {
-        setTimeout(() => maxbitrate_hide(attempts - 1), 200);
-    }
-}
-
 function maxbitrate_run() {
-    // console.log("run");
+    log?.("[maxbitrate_run]");
     if (!maxbitrate_set()) {
+        log?.('[maxbitrate_run] maxbitrate_set was false; retrying in 100ms')
         setTimeout(maxbitrate_run, 100);
-    } else {
-        maxbitrate_hide(10);
     }
 }
 
 function maxbitrate_start() {
-    // hide the bitrate selection menu while we try to simulate the interaction so that it doesn't rapidly appear and disappear.
+    log?.('[maxbitrate_start]')
     const styleNode = document.createElement("style");
     styleNode.textContent = `
         .player-streams {
@@ -75,28 +84,33 @@ function maxbitrate_start() {
     `;
     styleNode.id = "maxbitrate-hide-menu-style";
 
-    document.head.appendChild(styleNode);
+    if (hideMenu) {
+        document.head.appendChild(styleNode);
+    }
 
     maxbitrate_run();
 }
 
 function maxbitrate_finish() {
-    // remove the global style node again so that the menu becomes visible on normal user input again
+    log?.('[maxbitrate_finish]')
     const styleNode = document.querySelector("#maxbitrate-hide-menu-style");
-    styleNode.parentNode.removeChild(styleNode);
+
+    if (styleNode && hideMenu) {
+        styleNode.parentNode.removeChild(styleNode);
+    }
 }
 
-const WATCH_REGEXP = /netflix.com\/watch\/.*/;
+const WATCH_REGEXP = /netflix\.com\/watch\/.*/;
 
 let oldLocation;
 
 if(globalOptions.setMaxBitrate) {
-    console.log("netflix_max_bitrate.js enabled");
+    log?.("netflix_max_bitrate.js enabled");
     setInterval(function () {
         let newLocation = window.location.toString();
 
         if (newLocation !== oldLocation) {
-            // console.log("detected navigation");
+            log?.("detected navigation");
 
             oldLocation = newLocation;
             if (WATCH_REGEXP.test(newLocation)) {
